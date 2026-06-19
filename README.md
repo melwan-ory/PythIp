@@ -8,6 +8,29 @@
 - Afficher les reseaux de l'hôte
 - Rédiger un "rapport.pdf"
 
+# Installation
+### Linux :
+
+    sudo apt update
+    sudo apt install python3 python3-pip libpcap-dev
+    pip3 install scapy mac-vendor-lookup reportlab
+
+### Windows :
+    
+    winget install Python.Python.3.13
+    pip install scapy mac-vendor-lookup reportlab
+
+### MacOs :
+
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    brew install python
+    brew install libpcap
+    pip3 install scapy mac-vendor-lookup reportlab
+
+### Vérification :
+
+    python3 --version
+    pip3 --version
 
 # Exemple:
 
