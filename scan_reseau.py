@@ -2,11 +2,14 @@ from scapy.all import ARP, Ether, srp, sniff, IP, ICMP, conf, sr1, TCP, sr
 from collections import Counter
 import socket
 
+#AfficherIp
+from mac_vendor_lookup import MacLookup
+
 reseau = "192.168.1.0/24"
 resultats = ""
 reponses_paquets = "Veuillez lancer une 'Réponse Machine' pour obtenir cette donnée"
-
 PickData = False
+
 class RecuPsrcHwsr:
     def __init__(self, Psrc, Hwsr):
         self.Ip = Psrc
@@ -46,16 +49,20 @@ def ExportCSV():
     resultats_tries = sorted(
         resultats,
         key=lambda x: ipaddress.ip_address(x[1].psrc)
-    )
+    )   
 
     with open("machines.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["Adresse IP", "Adresse MAC"])
+        writer.writerow(["Nom", "Adresse IP", "Adresse MAC", "Os"])
 
+        global PickData
+        PickData = True
         for _, recu in resultats_tries:
-            writer.writerow([recu.psrc, recu.hwsrc])
+            writer.writerow([NomOrdinateur(recu.psrc), recu.psrc, recu.hwsrc, OsOrdinateur(recu.psrc)])
+        PickData = False
 
     print("Export CSV effectué.")
+    Choix()
 
 def Requête_ARP(): #Maj v1
     paquet = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=reseau)
@@ -108,47 +115,30 @@ def Recherche():
     if PickData == False :
         Choix()
 
-def AfficherIp():
-    cx=input("Afficher les fabriquants ? (O - N) : ")
-    if cx=="O" or cx=="o" or cx=="Y" or cx=="y":
-        FabricantCarte()
-    if cx=="N" or cx=="n":
-        AfficherRecherche()
-def AfficherRecherche(): #Maj v1
-    if PickData==False:
-        print("Machines détectées :")
+def AfficherIp(cx): #Maj v2
+    if cx=="":
+            cx=input("Afficher les fabriquants ? (O - N) : ")
+
+    data=[]
+    for _, recu in resultats:
+        try:
+            fabricant = MacLookup().lookup(recu.hwsrc)
+        except:
+             fabricant = "Inconnu"
+        
+        if cx=="O" or cx=="o" or cx=="Y" or cx=="y":
+            if PickData==True:
+                data.append(RecuPsrcHwsrFabriquant(str(recu.psrc), str(recu.hwsrc), fabricant))
+            else:
+                print(f"{recu.psrc} - {recu.hwsrc} - {fabricant}")
+        if cx=="N" or cx=="n":
+            if PickData==True:
+                data.append(RecuPsrcHwsr(str(recu.psrc), str(recu.hwsrc)))
+            else:
+                print(f"{recu.psrc} - {recu.hwsrc}")
 
     if PickData==True:
-        data=[]
-        for envoye, recu in resultats:
-            data.append(RecuPsrcHwsr(str(recu.psrc), str(recu.hwsrc)))
-        return data
-    else:
-        for envoye, recu in resultats:
-            print(f"IP : {recu.psrc}\tMAC : {recu.hwsrc}")
-    Choix()
-def FabricantCarte(): #Maj v1
-    from mac_vendor_lookup import MacLookup
-    MacLookup().update_vendors()
-
-    if PickData==True:
-        data=[]
-        for _, recu in resultats:
-            try:
-                fabricant = MacLookup().lookup(recu.hwsrc)
-            except:
-                fabricant = "Inconnu"
-
-            data.append(RecuPsrcHwsrFabriquant(str(recu.psrc), str(recu.hwsrc), fabricant))
-        return data
-    else:
-        for _, recu in resultats:
-            try:
-                fabricant = MacLookup().lookup(recu.hwsrc)
-            except:
-                fabricant = "Inconnu"
-
-            print(f"{recu.psrc} - {recu.hwsrc} - {fabricant}")
+        return data        
     Choix()
 
 def NomOrdinateur(ip):
@@ -166,7 +156,7 @@ def NomOrdinateur(ip):
         print(f"Nom du PC : {nom_pc}")
         Choix()
 
-def OsOrdinateur(ip): #Maj v1
+def OsOrdinateur(ip): #Maj v2
     if ip=="":
         ip = input("Adresse IP : ")
 
@@ -175,189 +165,167 @@ def OsOrdinateur(ip): #Maj v1
     if reponse:
         ttl = reponse.ttl
 
-        if PickData==True:
-            if ttl <= 64:
+        if ttl <= 64:
+            if PickData==True:
                 return "OS probable : Linux / macOS"
-            elif ttl <= 128:
+            print("OS probable : Linux / macOS")
+        elif ttl <= 128:
+            if PickData==True:
                 return "OS probable : Windows"
-            elif ttl <= 255:
+            print("OS probable : Windows")
+        elif ttl <= 255:
+            if PickData==True:
                 return "OS probable : Équipement réseau (Cisco, etc.)"
-            else:
-                return "Aucune réponse"
+            print("OS probable : Équipement réseau (Cisco, etc.)")
         else:
-            print(f"TTL = {ttl}")
+            if PickData==True:
+                return "Aucune réponse"
+            print("Aucune réponse")
 
-            if ttl <= 64:
-                print("OS probable : Linux / macOS")
-            elif ttl <= 128:
-                print("OS probable : Windows")
-            elif ttl <= 255:
-                print("OS probable : Équipement réseau (Cisco, etc.)")
-            else:
-                print("Aucune réponse")
-    if PickData==False:
-        Choix()
+        if PickData==False:
+            print(f"TTL = {ttl}")
+            Choix()
 
 def PortsOrdinateur():
     cx=input("Découverte Passive/courte(1) ou Agressive/longue(2) : ")
     if cx=="1" or cx=="Passive":
-        PortsOrdinateurPassif()
+        PortsOrdinateurPassif("")
     if cx=="2" or cx=="Agressive":
-        PortsOrdinateurAgressif()
-def PortsOrdinateurPassif(ip): #Maj v1
+        PortsOrdinateurAgressif("")
+def PortsOrdinateurPassif(ip): #Maj v2
     if ip=="":
         ip = input("Adresse IP ('All' pour toutes) : ")
 
-    if ip=="All":
-        PortsOrdinateurPassifAll()
     ports = [21, 22, 23, 25, 110, 143,53, 67, 68, 69, 135, 137, 138, 139, 445,80, 443, 8080, 8443, 161, 162, 389, 636, 1433, 1521, 3306, 5432, 6379, 27017, 3389, 5900,5000, 5601, 8000, 8888, 9200]
-    
+
     if PickData==False:
         print("Scan en cours...")
 
-    paquets = IP(dst=ip) / TCP(dport=ports, flags="S")
-    reponses, _ = sr(paquets, timeout=2, verbose=False)
+    if ip=="All":
+        prefix = reseau.rsplit(".", 1)[0] + "."
+        for i in range(1, 255):
+            ip = prefix + str(i)
 
-    if PickData==True:
-        data=[]
-        for _, rep in reponses:
-            if rep.haslayer(TCP) and rep[TCP].flags == 0x12:  # SYN-ACK
-                data.append(str(rep[TCP].sport))
-        return data
+            # Vérifie si l'hôte répond en ARP
+            arp = ARP(pdst=ip)
+            rep, _ = sr(arp, timeout=1, verbose=False)
+
+            if not rep:
+                continue
+
+            # Scan des ports
+            paquets = IP(dst=ip) / TCP(dport=ports, flags="S")
+            reponses, _ = sr(paquets, timeout=0.5, verbose=False)
+
+            ouverts = []
+
+            for _, r in reponses:
+                if r.haslayer(TCP) and r[TCP].flags == 0x12:
+                    ouverts.append(r[TCP].sport)
+
+            if PickData==True:
+                if ouverts:
+                    for port in ouverts:
+                        data.append(port)
+                data.append("|") #Séparateur entre les ip
+            else:
+                if ouverts:
+                    print(f"\nIP : {ip}")
+                    print("Ports ouverts :")
+                    for port in ouverts:
+                        print(f"  Port {port}")
     else:
-        print("\nPorts ouverts :")
-
-        for _, rep in reponses:
-            if rep.haslayer(TCP) and rep[TCP].flags == 0x12:  # SYN-ACK
-                print(f"Port {rep[TCP].sport} : OUVERT")
-
-    Choix()
-def PortsOrdinateurPassifAll(): #Maj v1
-    ports = [21, 22, 23,25, 110, 143,53, 67, 68, 69,135, 137, 138, 139, 445,80, 443, 8080, 8443,161, 162,389, 636,1433, 1521, 3306, 5432, 6379, 27017,3389, 5900,5000, 5601, 8000, 8888, 9200]
-
-    prefix = reseau.rsplit(".", 1)[0] + "."
-
-    data = []
-
-    if PickData==False:
-        print("Scan en cours...")
-
-    for i in range(1, 255):
-        ip = prefix + str(i)
-
-        # Vérifie si l'hôte répond en ARP
-        arp = ARP(pdst=ip)
-        rep, _ = sr(arp, timeout=1, verbose=False)
-
-        if not rep:
-            continue
-
-        # Scan des ports
         paquets = IP(dst=ip) / TCP(dport=ports, flags="S")
-        reponses, _ = sr(paquets, timeout=0.5, verbose=False)
-
-        ouverts = []
-
-        for _, r in reponses:
-            if r.haslayer(TCP) and r[TCP].flags == 0x12:
-                ouverts.append(r[TCP].sport)
+        reponses, _ = sr(paquets, timeout=2, verbose=False)
 
         if PickData==True:
-            if ouverts:
-                for port in ouverts:
-                    data.append(port)
-            data.append("|") #Séparateur entre les ip
+            data=[]
+            for _, rep in reponses:
+                if rep.haslayer(TCP) and rep[TCP].flags == 0x12:  # SYN-ACK
+                    data.append(str(rep[TCP].sport))
+            return data
         else:
-            if ouverts:
-                print(f"\nIP : {ip}")
-                print("Ports ouverts :")
-                for port in ouverts:
-                    print(f"  Port {port}")
-    return data
+            print("\nPorts ouverts :")
+
+            for _, rep in reponses:
+                if rep.haslayer(TCP) and rep[TCP].flags == 0x12:  # SYN-ACK
+                    print(f"Port {rep[TCP].sport} : OUVERT")
 
     Choix()
-def PortsOrdinateurAgressif(ip): #Maj v1
+def PortsOrdinateurAgressif(ip): #Maj v2
     if ip=="":
         ip = input("Adresse IP ('All' pour toutes) : ")
+        
+    if PickData==False:
+        print("Scan en cours...")
 
     if ip=="All":
-        PortsOrdinateurAgressifAll()
+        prefix = reseau.rsplit(".", 1)[0] + "."
 
-    if PickData==False:
-        print("Scan en cours...")
+        data = []
 
-    reponses, _ = sr(
-        IP(dst=ip) / TCP(dport=range(0, 65536), flags="S"),
-        timeout=2,
-        verbose=False
-    )
+        for i in range(1, 255):
 
-    if PickData==True:
-        ports_ouverts = []
-        for _, rep in reponses:
-            if rep.haslayer(TCP) and rep[TCP].flags == 0x12:  # SYN-ACK
-                ports_ouverts.append(rep[TCP].sport) #Sport : Réponse du port appelé
-        return ports_ouverts
+            ip = f"{prefix}{i}"
+
+            # Vérifie que la machine existe
+            rep, _ = srp(
+                Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip),
+                timeout=1,
+                verbose=False
+            )
+
+            if not rep:
+                continue
+
+            print(f"Scan de {ip}...")
+
+            reponses, _ = sr(
+                IP(dst=ip) / TCP(dport=range(65536), flags="S"),
+                timeout=2,
+                verbose=False
+            )
+
+            ports_ouverts = []
+
+            for _, r in reponses:
+                if r.haslayer(TCP) and r[TCP].flags == 0x12:
+                    ports_ouverts.append(r[TCP].sport)
+
+            if PickData==True:
+                for port in sorted(ports_ouverts):
+                    data.append(port)
+                data.append("|") #Séparateur entre les ip
+            else:
+                print(f"IP : {ip}")
+                print(f"{len(ports_ouverts)} port(s) ouvert(s) :")
+                for port in sorted(ports_ouverts):
+                    print(port)
+
+        if PickData==True:
+            return data
     else:
-        ports_ouverts = []
-        for _, rep in reponses:
-            if rep.haslayer(TCP) and rep[TCP].flags == 0x12:  # SYN-ACK
-                ports_ouverts.append(rep[TCP].sport)
-        print(f"\n{len(ports_ouverts)} port(s) ouvert(s) :")
-        for port in sorted(ports_ouverts):
-            print(port)
-
-    Choix()
-def PortsOrdinateurAgressifAll(): #Maj v1
-    if PickData==False:
-        print("Scan en cours...")
-
-    from scapy.all import Ether, ARP, srp
-
-    prefix = reseau.rsplit(".", 1)[0] + "."
-
-    data = []
-
-    for i in range(1, 255):
-
-        ip = f"{prefix}{i}"
-
-        # Vérifie que la machine existe
-        rep, _ = srp(
-            Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip),
-            timeout=1,
-            verbose=False
-        )
-
-        if not rep:
-            continue
-
-        print(f"Scan de {ip}...")
-
         reponses, _ = sr(
-            IP(dst=ip) / TCP(dport=range(65536), flags="S"),
+            IP(dst=ip) / TCP(dport=range(0, 65536), flags="S"),
             timeout=2,
             verbose=False
         )
 
-        ports_ouverts = []
-
-        for _, r in reponses:
-            if r.haslayer(TCP) and r[TCP].flags == 0x12:
-                ports_ouverts.append(r[TCP].sport)
-
         if PickData==True:
-            for port in sorted(ports_ouverts):
-                data.append(port)
-            data.append("|") #Séparateur entre les ip
+            ports_ouverts = []
+            for _, rep in reponses:
+                if rep.haslayer(TCP) and rep[TCP].flags == 0x12:  # SYN-ACK
+                    ports_ouverts.append(rep[TCP].sport) #Sport : Réponse du port appelé
+            return ports_ouverts
         else:
-            print(f"IP : {ip}")
-            print(f"{len(ports_ouverts)} port(s) ouvert(s) :")
+            ports_ouverts = []
+            for _, rep in reponses:
+                if rep.haslayer(TCP) and rep[TCP].flags == 0x12:  # SYN-ACK
+                    ports_ouverts.append(rep[TCP].sport)
+            print(f"\n{len(ports_ouverts)} port(s) ouvert(s) :")
             for port in sorted(ports_ouverts):
                 print(port)
 
-    if PickData==True:
-        return data
     Choix()
 
 def AfficherReseauxHote():
@@ -381,7 +349,6 @@ def CreationPDF():
     from reportlab.pdfbase.pdfmetrics import stringWidth
     from collections import Counter
     from datetime import datetime
-    from mac_vendor_lookup import MacLookup
     import socket
 
     global PickData
@@ -431,14 +398,12 @@ def CreationPDF():
     story.append(tableau)
     story.append(Spacer(1,0.8*cm))
 
-    story.append(PageBreak())
-
     # DETAILS DES MACHINES
     story.append(Paragraph("Détails des machines", h1))
     story.append(Spacer(1, 0.5 * cm))
 
-    IpMac = AfficherRecherche()
-    Constructeur = FabricantCarte()
+    IpMac = AfficherIp("O")
+    Constructeur = AfficherIp("O")
 
     for i in range(len(IpMac)):
         Nom = NomOrdinateur(IpMac[i].Ip)
@@ -521,7 +486,7 @@ def Choix():
     if cx=="2":
         AfficherReseau()
     if cx=="3":
-        AfficherIp()
+        AfficherIp("")
     if cx=="4":
         ExportCSV()
     if cx=="5":
