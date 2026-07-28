@@ -8,7 +8,7 @@
 - Afficher les reseaux de l'hôte
 - Rédiger un "rapport.pdf"
 
-# Installation
+# Installation des paquets
 ### Linux :
 
     sudo apt update
